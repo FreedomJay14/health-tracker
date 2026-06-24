@@ -75,6 +75,16 @@
   .t-btn.yes.active { background: var(--green-light); border-color: var(--green-mid); color: var(--green-dark); }
   .t-btn.no.active { background: var(--red-light); border-color: var(--red-mid); color: var(--red-dark); }
 
+  /* 运动分钟展开行 */
+  .exercise-expand { overflow: hidden; max-height: 0; transition: max-height 0.25s ease; border-bottom: 0.5px solid var(--border); }
+  .exercise-expand.open { max-height: 80px; }
+  .exercise-expand:last-child { border-bottom: none; }
+  .exercise-inner { display: flex; align-items: center; gap: 10px; padding: 10px 14px 12px 14px; background: var(--green-light); }
+  .exercise-inner label { font-size: 13px; color: var(--green-dark); display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .exercise-inner input { flex: 1; border: none; border-bottom: 1px solid var(--green-mid); background: none; font-size: 14px; color: var(--green-dark); font-family: inherit; outline: none; padding: 2px 4px; max-width: 80px; }
+  .exercise-inner input::placeholder { color: var(--green-mid); }
+  .exercise-inner .unit { font-size: 13px; color: var(--green-dark); flex-shrink: 0; }
+
   .btn-save { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); width: calc(100% - 24px); max-width: 456px; padding: 14px; background: var(--green); color: white; border: none; border-radius: var(--radius); font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 16px rgba(29,158,117,0.35); }
 
   .record-card { background: var(--card); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; }
@@ -131,11 +141,6 @@
         <input type="number" id="f-weight" placeholder="0.0" step="0.1" min="0" inputmode="decimal">
         <span class="unit">kg</span>
       </div>
-      <div class="field">
-        <label><i class="ti ti-shoe"></i>步数</label>
-        <input type="number" id="f-steps" placeholder="0" min="0" inputmode="numeric">
-        <span class="unit">步</span>
-      </div>
     </div>
 
     <div class="section">
@@ -170,6 +175,31 @@
           <button class="t-btn no" id="snack-no" onclick="setToggle('snack','no')">没有</button>
         </div>
       </div>
+      <div class="toggle-row">
+        <span class="toggle-label"><i class="ti ti-gift"></i>奖励食品</span>
+        <div class="toggle">
+          <button class="t-btn yes" id="reward-yes" onclick="setToggle('reward','yes')">有</button>
+          <button class="t-btn no" id="reward-no" onclick="setToggle('reward','no')">没有</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">运动记录</div>
+      <div class="toggle-row">
+        <span class="toggle-label"><i class="ti ti-run"></i>运动</span>
+        <div class="toggle">
+          <button class="t-btn yes" id="exercise-yes" onclick="setExercise('yes')">有</button>
+          <button class="t-btn no" id="exercise-no" onclick="setExercise('no')">没有</button>
+        </div>
+      </div>
+      <div class="exercise-expand" id="exercise-expand">
+        <div class="exercise-inner">
+          <label><i class="ti ti-clock"></i>运动时间</label>
+          <input type="number" id="f-exercise-mins" placeholder="0" min="0" inputmode="numeric">
+          <span class="unit">分钟</span>
+        </div>
+      </div>
     </div>
 
     <div class="section">
@@ -194,7 +224,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const state = { drink: null, snack: null };
+const state = { drink: null, snack: null, reward: null, exercise: null };
 
 function today() {
   const d = new Date();
@@ -221,10 +251,27 @@ function setToggle(field, val) {
   });
 }
 
-function getRecords() {
-  try { return JSON.parse(localStorage.getItem('htr_v2')||'[]'); } catch { return []; }
+function setExercise(val) {
+  state.exercise = state.exercise===val ? null : val;
+  ['yes','no'].forEach(v => {
+    const el = document.getElementById('exercise-'+v);
+    el.classList.remove('active');
+    if(state.exercise===v) el.classList.add('active');
+  });
+  const expand = document.getElementById('exercise-expand');
+  if(state.exercise==='yes') {
+    expand.classList.add('open');
+    setTimeout(()=>document.getElementById('f-exercise-mins').focus(), 50);
+  } else {
+    expand.classList.remove('open');
+    document.getElementById('f-exercise-mins').value = '';
+  }
 }
-function saveRecords(r) { localStorage.setItem('htr_v2', JSON.stringify(r)); }
+
+function getRecords() {
+  try { return JSON.parse(localStorage.getItem('htr_v3')||'[]'); } catch { return []; }
+}
+function saveRecords(r) { localStorage.setItem('htr_v3', JSON.stringify(r)); }
 
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -239,12 +286,14 @@ function saveRecord() {
   const rec = {
     date,
     weight: document.getElementById('f-weight').value,
-    steps: document.getElementById('f-steps').value,
     breakfast: document.getElementById('f-breakfast').value,
     lunch: document.getElementById('f-lunch').value,
     dinner: document.getElementById('f-dinner').value,
     drink: state.drink,
     snack: state.snack,
+    reward: state.reward,
+    exercise: state.exercise,
+    exerciseMins: state.exercise==='yes' ? document.getElementById('f-exercise-mins').value : '',
     notes: document.getElementById('f-notes').value,
     ts: Date.now()
   };
@@ -271,6 +320,12 @@ function badge(val) {
   return '<span class="badge na">未填</span>';
 }
 
+function exerciseBadge(val, mins) {
+  if(val==='yes') return '<span class="badge yes">有' + (mins ? ' · '+mins+'分钟' : '') + '</span>';
+  if(val==='no') return '<span class="badge no">没有</span>';
+  return '<span class="badge na">未填</span>';
+}
+
 function renderHistory() {
   const records = getRecords();
   const el = document.getElementById('history-list');
@@ -286,12 +341,13 @@ function renderHistory() {
       </div>
       <div class="record-grid">
         <div class="record-item"><span class="rl">体重</span><span class="rv">${r.weight?r.weight+' kg':'—'}</span></div>
-        <div class="record-item"><span class="rl">步数</span><span class="rv">${r.steps?Number(r.steps).toLocaleString()+' 步':'—'}</span></div>
+        <div class="record-item"><span class="rl">运动</span>${exerciseBadge(r.exercise, r.exerciseMins)}</div>
         <div class="record-item"><span class="rl">早餐</span><span class="rv">${r.breakfast||'—'}</span></div>
         <div class="record-item"><span class="rl">午餐半碗饭</span><span class="rv">${r.lunch||'—'}</span></div>
         <div class="record-item"><span class="rl">晚餐半碗饭</span><span class="rv">${r.dinner||'—'}</span></div>
         <div class="record-item"><span class="rl">含糖饮料</span>${badge(r.drink)}</div>
         <div class="record-item"><span class="rl">零食</span>${badge(r.snack)}</div>
+        <div class="record-item"><span class="rl">奖励食品</span>${badge(r.reward)}</div>
       </div>
       ${r.notes?`<div class="record-notes"><i class="ti ti-notes" style="font-size:13px;flex-shrink:0;margin-top:1px"></i>${r.notes}</div>`:''}
     </div>
