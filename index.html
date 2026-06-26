@@ -415,10 +415,10 @@ function showToast(msg) {
 
 // ── API calls ──
 async function apiCall(body) {
-  const res = await fetch(API, {
-    method: 'POST',
-    body: JSON.stringify(body)
-  });
+  const action = body.action;
+  const bodyParam = encodeURIComponent(JSON.stringify(body));
+  const url = API + '?action=' + action + '&body=' + bodyParam;
+  const res = await fetch(url, { method: 'GET' });
   return res.json();
 }
 
