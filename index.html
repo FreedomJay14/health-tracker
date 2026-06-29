@@ -186,11 +186,11 @@
         <input type="text" id="f-breakfast" placeholder="早餐内容…">
       </div>
       <div class="field">
-        <label><i class="ti ti-bowl"></i>午餐</label>
+        <label><i class="ti ti-bowl"></i>午餐半碗饭</label>
         <input type="text" id="f-lunch" placeholder="配菜内容…">
       </div>
       <div class="field">
-        <label><i class="ti ti-moon"></i>晚餐</label>
+        <label><i class="ti ti-moon"></i>晚餐半碗饭</label>
         <input type="text" id="f-dinner" placeholder="配菜内容…">
       </div>
     </div>
@@ -493,9 +493,11 @@ function exerciseBadge(val, mins) {
 }
 function fmtDate(d) {
   if (!d) return '—';
-  const parts = String(d).slice(0, 10).split('-');
-  if (parts.length < 3) return d;
-  return parts[0] + '年' + parts[1] + '月' + parts[2] + '日';
+  const s = String(d).trim();
+  const y = s.substring(0, 4);
+  const m = s.substring(5, 7);
+  const day = s.substring(8, 10);
+  return y + '年' + m + '月' + day + '日';
 }
 
 function renderHistory() {
@@ -504,7 +506,10 @@ function renderHistory() {
     el.innerHTML='<div class="empty"><i class="ti ti-clipboard-list"></i><p>暂无记录<br>快去填写今天的健康数据吧</p></div>';
     return;
   }
-  el.innerHTML = cachedRecords.map(r=>`
+  // 调试：显示第一条记录的日期原始值
+  const debugDate = cachedRecords[0].date;
+  el.innerHTML = '<div style="font-size:11px;color:gray;padding:8px 14px;background:#fffbe6;border-radius:8px;margin-bottom:8px;">DEBUG date[0] = [' + String(debugDate) + '] len=' + String(debugDate).length + '</div>';
+  el.innerHTML += cachedRecords.map(r=>`
     <div class="record-card">
       <div class="record-header">
         <span class="record-date-label"><i class="ti ti-calendar"></i>${fmtDate(r.date)}</span>
