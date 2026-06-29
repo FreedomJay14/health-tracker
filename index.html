@@ -492,8 +492,10 @@ function exerciseBadge(val, mins) {
   return '<span class="badge na">未填</span>';
 }
 function fmtDate(d) {
-  const [y,m,day] = d.split('-');
-  return y+'年'+m+'月'+day+'日';
+  if (!d) return '—';
+  const parts = String(d).slice(0, 10).split('-');
+  if (parts.length < 3) return d;
+  return parts[0] + '年' + parts[1] + '月' + parts[2] + '日';
 }
 
 function renderHistory() {
