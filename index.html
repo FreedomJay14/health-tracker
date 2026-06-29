@@ -494,6 +494,15 @@ function exerciseBadge(val, mins) {
 function fmtDate(d) {
   if (!d) return '—';
   const s = String(d).trim();
+  // 如果是 ISO 格式（含 T），转成本地时间再取日期
+  if (s.indexOf('T') !== -1) {
+    const local = new Date(s);
+    const y = local.getFullYear();
+    const m = local.getMonth() + 1;
+    const day = local.getDate();
+    return y + '年' + (m < 10 ? '0' + m : m) + '月' + (day < 10 ? '0' + day : day) + '日';
+  }
+  // 纯日期字符串 YYYY-MM-DD，直接截取
   const y = s.substring(0, 4);
   const m = s.substring(5, 7);
   const day = s.substring(8, 10);
@@ -506,10 +515,7 @@ function renderHistory() {
     el.innerHTML='<div class="empty"><i class="ti ti-clipboard-list"></i><p>暂无记录<br>快去填写今天的健康数据吧</p></div>';
     return;
   }
-  // 调试：显示第一条记录的日期原始值
-  const debugDate = cachedRecords[0].date;
-  el.innerHTML = '<div style="font-size:11px;color:gray;padding:8px 14px;background:#fffbe6;border-radius:8px;margin-bottom:8px;">DEBUG date[0] = [' + String(debugDate) + '] len=' + String(debugDate).length + '</div>';
-  el.innerHTML += cachedRecords.map(r=>`
+  el.innerHTML = cachedRecords.map(r=>`
     <div class="record-card">
       <div class="record-header">
         <span class="record-date-label"><i class="ti ti-calendar"></i>${fmtDate(r.date)}</span>
