@@ -142,6 +142,16 @@
 
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+  /* Warning modal */
+  .warn-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 24px; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .warn-overlay.open { opacity: 1; pointer-events: all; }
+  .warn-box { background: var(--card); border-radius: 16px; padding: 28px 24px 20px; max-width: 320px; width: 100%; text-align: center; transform: scale(0.92); transition: transform 0.2s; }
+  .warn-overlay.open .warn-box { transform: scale(1); }
+  .warn-icon { font-size: 40px; color: #F59E0B; margin-bottom: 12px; }
+  .warn-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+  .warn-msg { font-size: 14px; color: var(--muted); line-height: 1.6; margin-bottom: 20px; }
+  .warn-btn { width: 100%; padding: 12px; background: #F59E0B; color: white; border: none; border-radius: var(--radius); font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
 </style>
 </head>
 <body>
@@ -285,11 +295,11 @@
           <input type="text" id="m-breakfast" placeholder="早餐内容…">
         </div>
         <div class="modal-field">
-          <label>午餐半碗饭</label>
+          <label>午餐</label>
           <input type="text" id="m-lunch" placeholder="配菜内容…">
         </div>
         <div class="modal-field">
-          <label>晚餐半碗饭</label>
+          <label>晚餐</label>
           <input type="text" id="m-dinner" placeholder="配菜内容…">
         </div>
       </div>
@@ -350,6 +360,16 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- 警告弹窗 -->
+<div class="warn-overlay" id="warn-overlay" onclick="closeWarning()">
+  <div class="warn-box" onclick="event.stopPropagation()">
+    <div class="warn-icon"><i class="ti ti-alert-triangle"></i></div>
+    <div class="warn-title" id="warn-title"></div>
+    <div class="warn-msg" id="warn-msg"></div>
+    <button class="warn-btn" onclick="closeWarning()">我知道了</button>
+  </div>
+</div>
+
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbxzi09WEDe4Fs-OwFMfYOeQSM1ILztht2H5RY_YstOOc42STN74HEUlA8YjBPIbTzTl/exec';
 
@@ -375,12 +395,92 @@ function switchTab(t) {
   if(t==='history') loadHistory();
 }
 
+// ── Warning helpers ──
+function getLocalDateStr(dateVal) {
+  if (!dateVal) return '';
+  const s = String(dateVal);
+  if (s.indexOf('T') !== -1) {
+    const d = new Date(s);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    return y + '-' + (m < 10 ? '0'+m : m) + '-' + (day < 10 ? '0'+day : day);
+  }
+  return s.substring(0, 10);
+}
+
+function getPast7Days() {
+  const days = [];
+  for (let i = 1; i <= 7; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    days.push(y + '-' + (m < 10 ? '0'+m : m) + '-' + (day < 10 ? '0'+day : day));
+  }
+  return days;
+}
+
+function checkDrinkWarning() {
+  const past7 = getPast7Days();
+  const hits = cachedRecords.filter(r => {
+    const d = getLocalDateStr(r.date);
+    return past7.includes(d) && r.drink === 'yes';
+  });
+  if (hits.length > 0) {
+    showWarning('⚠️ 含糖饮料摄入过量', '过去 7 天内你已有 ' + hits.length + ' 天摄入含糖饮料，注意控制！');
+  }
+}
+
+function checkRewardWarning() {
+  const past7 = getPast7Days();
+  const hits = cachedRecords.filter(r => {
+    const d = getLocalDateStr(r.date);
+    return past7.includes(d) && r.reward === 'yes';
+  });
+  if (hits.length > 0) {
+    showWarning('⚠️ 奖励食品摄入过量', '过去 7 天内你已有 ' + hits.length + ' 天摄入奖励食品，注意不要过量！');
+  }
+}
+
+function checkExerciseWarning() {
+  // 找最近4天（不含今天）是否连续没有运动
+  const days = [];
+  for (let i = 1; i <= 4; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    days.push(y + '-' + (m < 10 ? '0'+m : m) + '-' + (day < 10 ? '0'+day : day));
+  }
+  const noExerciseDays = days.filter(day => {
+    const rec = cachedRecords.find(r => getLocalDateStr(r.date) === day);
+    return rec && rec.exercise === 'no';
+  });
+  if (noExerciseDays.length >= 4) {
+    showWarning('⚠️ 运动不足', '你已经连续 4 天没有运动了，今天动起来吧！');
+  }
+}
+
+function showWarning(title, msg) {
+  document.getElementById('warn-title').textContent = title;
+  document.getElementById('warn-msg').textContent = msg;
+  document.getElementById('warn-overlay').classList.add('open');
+}
+function closeWarning() {
+  document.getElementById('warn-overlay').classList.remove('open');
+}
+
 // ── Toggles (record form) ──
 function setToggle(field, val) {
   state[field] = state[field]===val ? null : val;
   ['yes','no'].forEach(v => {
     document.getElementById(field+'-'+v).classList.toggle('active', state[field]===v);
   });
+  if (state[field] === 'yes' && field === 'drink') checkDrinkWarning();
+  if (state[field] === 'yes' && field === 'reward') checkRewardWarning();
 }
 function setExercise(val) {
   state.exercise = state.exercise===val ? null : val;
@@ -388,6 +488,7 @@ function setExercise(val) {
   const ex = document.getElementById('exercise-expand');
   if(state.exercise==='yes') { ex.classList.add('open'); setTimeout(()=>document.getElementById('f-exercise-mins').focus(),50); }
   else { ex.classList.remove('open'); document.getElementById('f-exercise-mins').value=''; }
+  if (state.exercise === 'no') checkExerciseWarning();
 }
 
 // ── Toggles (modal) ──
@@ -528,8 +629,8 @@ function renderHistory() {
         <div class="record-item"><span class="rl">体重</span><span class="rv">${r.weight?r.weight+' kg':'—'}</span></div>
         <div class="record-item"><span class="rl">运动</span>${exerciseBadge(r.exercise, r.exerciseMins)}</div>
         <div class="record-item"><span class="rl">早餐</span><span class="rv">${r.breakfast||'—'}</span></div>
-        <div class="record-item"><span class="rl">午餐半碗饭</span><span class="rv">${r.lunch||'—'}</span></div>
-        <div class="record-item"><span class="rl">晚餐半碗饭</span><span class="rv">${r.dinner||'—'}</span></div>
+        <div class="record-item"><span class="rl">午餐</span><span class="rv">${r.lunch||'—'}</span></div>
+        <div class="record-item"><span class="rl">晚餐</span><span class="rv">${r.dinner||'—'}</span></div>
         <div class="record-item"><span class="rl">含糖饮料</span>${badge(r.drink)}</div>
         <div class="record-item"><span class="rl">零食</span>${badge(r.snack)}</div>
         <div class="record-item"><span class="rl">奖励食品</span>${badge(r.reward)}</div>
@@ -558,7 +659,16 @@ function openEdit(ts) {
   if(!rec) return;
   editingTs = ts;
 
-  document.getElementById('m-date').value = rec.date || '';
+  // 处理日期：如果是 ISO 格式转成 YYYY-MM-DD
+  let recDate = rec.date || '';
+  if (recDate.indexOf('T') !== -1) {
+    const dObj = new Date(recDate);
+    const y = dObj.getFullYear();
+    const m = dObj.getMonth() + 1;
+    const d = dObj.getDate();
+    recDate = y + '-' + (m < 10 ? '0'+m : m) + '-' + (d < 10 ? '0'+d : d);
+  }
+  document.getElementById('m-date').value = recDate;
   document.getElementById('m-weight').value = rec.weight || '';
   document.getElementById('m-breakfast').value = rec.breakfast || '';
   document.getElementById('m-lunch').value = rec.lunch || '';
