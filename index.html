@@ -497,6 +497,8 @@ function setModalToggle(field, val) {
   ['yes','no'].forEach(v => {
     document.getElementById('m-'+field+'-'+v).classList.toggle('active', mState[field]===v);
   });
+  if (mState[field] === 'yes' && field === 'drink') checkDrinkWarning();
+  if (mState[field] === 'yes' && field === 'reward') checkRewardWarning();
 }
 function setModalExercise(val) {
   mState.exercise = mState.exercise===val ? null : val;
@@ -504,6 +506,7 @@ function setModalExercise(val) {
   const ex = document.getElementById('m-exercise-expand');
   if(mState.exercise==='yes') { ex.classList.add('open'); }
   else { ex.classList.remove('open'); document.getElementById('m-exercise-mins').value=''; }
+  if (mState.exercise === 'no') checkExerciseWarning();
 }
 
 // ── Toast ──
