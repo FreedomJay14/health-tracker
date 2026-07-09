@@ -170,6 +170,7 @@
 <div class="tabs">
   <button class="tab active" onclick="switchTab('record')"><i class="ti ti-pencil"></i>今日记录</button>
   <button class="tab" onclick="switchTab('history')"><i class="ti ti-history"></i>历史记录</button>
+  <button class="tab" onclick="switchTab('trend')"><i class="ti ti-chart-line"></i>体重趋势</button>
 </div>
 
 <div class="content">
@@ -260,6 +261,21 @@
   <!-- 历史记录 -->
   <div id="tab-history" style="display:none;">
     <div id="history-list"></div>
+  </div>
+
+  <!-- 体重趋势 -->
+  <div id="tab-trend" style="display:none;">
+    <div class="section" style="padding:14px;">
+      <div class="section-title">每周平均体重（过去 24 周）</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--muted);">以周一至周日计算，从 2026年6月29日 起第一周</div>
+      <div style="position:relative;width:100%;height:260px;margin-top:16px;">
+        <canvas id="weight-chart"></canvas>
+      </div>
+    </div>
+    <div class="section" style="margin-top:0;">
+      <div class="section-title" style="padding-bottom:4px;">周平均明细</div>
+      <div id="trend-table"></div>
+    </div>
   </div>
 
 </div>
@@ -388,11 +404,15 @@ document.getElementById('f-date').value = today();
 
 // ── Tabs ──
 function switchTab(t) {
-  document.querySelectorAll('.tab').forEach((el,i) => el.classList.toggle('active',(t==='record'&&i===0)||(t==='history'&&i===1)));
+  document.querySelectorAll('.tab').forEach((el,i) => {
+    el.classList.toggle('active', (t==='record'&&i===0)||(t==='history'&&i===1)||(t==='trend'&&i===2));
+  });
   document.getElementById('tab-record').style.display = t==='record'?'':'none';
   document.getElementById('tab-history').style.display = t==='history'?'':'none';
+  document.getElementById('tab-trend').style.display = t==='trend'?'':'none';
   document.getElementById('btn-save').style.display = t==='record'?'':'none';
   if(t==='history') loadHistory();
+  if(t==='trend') loadTrend();
 }
 
 // ── Warning helpers ──
@@ -744,5 +764,146 @@ async function saveEdit() {
   btn.innerHTML = '<i class="ti ti-device-floppy"></i>保存修改';
 }
 </script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// ── Trend ──
+let weightChart = null;
+
+function getWeekStart(dateStr) {
+  // 以 2026-06-29 (周一) 为第一周起点
+  const base = new Date('2026-06-29T00:00:00');
+  const d = new Date(dateStr + 'T00:00:00');
+  const diffDays = Math.floor((d - base) / 86400000);
+  if (diffDays < 0) return null; // 起点前的数据忽略
+  const weekIndex = Math.floor(diffDays / 7);
+  return weekIndex;
+}
+
+function getWeekLabel(weekIndex) {
+  const base = new Date('2026-06-29T00:00:00');
+  const start = new Date(base.getTime() + weekIndex * 7 * 86400000);
+  const end = new Date(start.getTime() + 6 * 86400000);
+  const fmt = d => (d.getMonth()+1) + '/' + d.getDate();
+  return fmt(start) + '–' + fmt(end);
+}
+
+async function loadTrend() {
+  // 如果 cachedRecords 是空的，先从云端拉
+  if (cachedRecords.length === 0) {
+    try {
+      const res = await apiCall({ action: 'getAll' });
+      cachedRecords = (res.data || []).filter(r => r.date).sort((a,b) => b.date.localeCompare(a.date));
+    } catch(e) {}
+  }
+  renderTrend();
+}
+
+function renderTrend() {
+  // 把记录按周分组
+  const weekMap = {};
+  cachedRecords.forEach(r => {
+    const dateStr = getLocalDateStr(r.date);
+    if (!dateStr || !r.weight) return;
+    const w = parseFloat(r.weight);
+    if (isNaN(w)) return;
+    const idx = getWeekStart(dateStr);
+    if (idx === null) return;
+    if (!weekMap[idx]) weekMap[idx] = [];
+    weekMap[idx].push(w);
+  });
+
+  // 找当前周索引
+  const todayStr = today();
+  const currentWeek = getWeekStart(todayStr) ?? 0;
+
+  // 只取最近 24 周（含当前周）
+  const startWeek = Math.max(0, currentWeek - 23);
+  const weeks = [];
+  for (let i = startWeek; i <= currentWeek; i++) {
+    const weights = weekMap[i] || [];
+    const avg = weights.length > 0 ? (weights.reduce((a,b)=>a+b,0) / weights.length) : null;
+    weeks.push({ index: i, label: getWeekLabel(i), avg, count: weights.length });
+  }
+
+  // 渲染图表
+  const labels = weeks.map(w => 'W' + (w.index + 1) + '\n' + w.label);
+  const data = weeks.map(w => w.avg ? parseFloat(w.avg.toFixed(1)) : null);
+
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  const textColor = isDark ? '#9ca3af' : '#6b7280';
+
+  const ctx = document.getElementById('weight-chart').getContext('2d');
+  if (weightChart) weightChart.destroy();
+  weightChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: weeks.map(w => 'W'+(w.index+1)),
+      datasets: [{
+        label: '周均体重 (kg)',
+        data,
+        borderColor: '#1D9E75',
+        backgroundColor: 'rgba(29,158,117,0.12)',
+        pointBackgroundColor: '#1D9E75',
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        tension: 0.35,
+        fill: true,
+        spanGaps: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => weeks[items[0].dataIndex].label,
+            label: (item) => item.raw ? item.raw + ' kg' : '无数据'
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: gridColor },
+          ticks: { color: textColor, font: { size: 10 } }
+        },
+        y: {
+          grid: { color: gridColor },
+          ticks: { color: textColor, font: { size: 11 }, callback: v => v + ' kg' },
+          suggestedMin: Math.min(...data.filter(Boolean)) - 1,
+          suggestedMax: Math.max(...data.filter(Boolean)) + 1
+        }
+      }
+    }
+  });
+
+  // 渲染明细表
+  const tableEl = document.getElementById('trend-table');
+  if (weeks.every(w => w.avg === null)) {
+    tableEl.innerHTML = '<div style="padding:16px 14px;font-size:14px;color:var(--muted);">暂无数据，记录体重后会自动显示</div>';
+    return;
+  }
+
+  let prevAvg = null;
+  tableEl.innerHTML = weeks.slice().reverse().map(w => {
+    const diff = (w.avg && prevAvg) ? (w.avg - prevAvg) : null;
+    const arrow = diff === null ? '' : diff > 0 ? '<span style="color:#ef4444">▲ +' + diff.toFixed(1) + '</span>' : diff < 0 ? '<span style="color:#1D9E75">▼ ' + diff.toFixed(1) + '</span>' : '<span style="color:var(--muted)">— 持平</span>';
+    if (w.avg) prevAvg = w.avg;
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:0.5px solid var(--border);">
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--text)">第 ${w.index+1} 周</div>
+        <div style="font-size:11px;color:var(--muted)">${w.label}（${w.count} 天有记录）</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:15px;font-weight:700;color:var(--text)">${w.avg ? w.avg.toFixed(1)+' kg' : '—'}</div>
+        <div style="font-size:11px;margin-top:2px">${arrow}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+</script>
+
 </body>
 </html>
